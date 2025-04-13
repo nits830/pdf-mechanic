@@ -26,6 +26,15 @@ const pdfSchema = new mongoose.Schema({
     type: Buffer,
     required: true
   },
+  extractedText: {
+    type: String,
+    default: ''
+  },
+  textExtractionStatus: {
+    type: String,
+    enum: ['pending', 'completed', 'failed'],
+    default: 'pending'
+  },
   contentType: {
     type: String,
     default: 'application/pdf'

@@ -1,16 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
+const pdfParse = require('pdf-parse');
 const Pdf = require('../models/Pdf');
 const auth = require('../middleware/auth');
 
-// Configure multer for PDF uploads
+// Configure multer for PDF uploads (in-memory storage)
 const upload = multer({
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB limit
   },
   fileFilter: (req, file, cb) => {
-    // Accept only PDF files
     if (!file) {
       cb(new Error('No file uploaded'), false);
     } else if (file.mimetype !== 'application/pdf') {
@@ -24,18 +24,27 @@ const upload = multer({
 // Apply auth middleware to all routes
 router.use(auth);
 
-// Upload PDF route
-router.post('/upload', (req, res) => {
+// Extract text from PDF buffer
+async function extractTextFromPDF(buffer) {
+  try {
+    const data = await pdfParse(buffer);
+    return data.text;
+  } catch (error) {
+    console.error('Error extracting text:', error);
+    throw new Error('Failed to extract text from PDF');
+  }
+}
+
+// Upload and extract text route
+router.post('/extract', async (req, res) => {
   upload(req, res, async (err) => {
     try {
       if (err instanceof multer.MulterError) {
-        // Multer error (e.g., file too large)
         return res.status(400).json({ 
           error: 'File upload error',
           details: err.message 
         });
       } else if (err) {
-        // Other errors (e.g., wrong file type)
         return res.status(400).json({ 
           error: err.message 
         });
@@ -45,32 +54,20 @@ router.post('/upload', (req, res) => {
         return res.status(400).json({ error: 'No PDF file provided' });
       }
 
-      // Create new PDF document
-      const pdf = new Pdf({
+      // Extract text directly
+      const extractedText = await extractTextFromPDF(req.file.buffer);
+
+      // Return the extracted text
+      res.json({
         filename: req.file.originalname,
-        originalName: req.file.originalname,
         fileSize: req.file.size,
-        data: req.file.buffer,
-        userId: req.userId
+        text: extractedText
       });
 
-      await pdf.save();
-
-      res.status(201).json({
-        message: 'PDF uploaded successfully',
-        pdf: {
-          id: pdf._id,
-          filename: pdf.filename,
-          originalName: pdf.originalName,
-          fileSize: pdf.fileSize,
-          uploadDate: pdf.uploadDate,
-          fileUrl: pdf.fileUrl
-        }
-      });
     } catch (error) {
-      console.error('PDF upload error:', error);
+      console.error('PDF processing error:', error);
       res.status(500).json({ 
-        error: 'Error uploading PDF file',
+        error: 'Error processing PDF file',
         details: error.message 
       });
     }
@@ -114,6 +111,87 @@ router.get('/:id', async (req, res) => {
   } catch (error) {
     console.error('Error retrieving PDF:', error);
     res.status(500).json({ error: 'Error retrieving PDF' });
+  }
+});
+
+// Get extracted text from PDF
+router.get('/:id/text', async (req, res) => {
+  try {
+    const pdf = await Pdf.findOne({ 
+      _id: req.params.id,
+      userId: req.userId 
+    }).select('extractedText textExtractionStatus filename');
+
+    if (!pdf) {
+      return res.status(404).json({ error: 'PDF not found' });
+    }
+
+    if (pdf.textExtractionStatus === 'pending') {
+      return res.status(202).json({ 
+        status: 'pending',
+        message: 'Text extraction is still in progress' 
+      });
+    }
+
+    if (pdf.textExtractionStatus === 'failed') {
+      return res.status(500).json({ 
+        status: 'failed',
+        message: 'Text extraction failed for this PDF' 
+      });
+    }
+
+    res.json({
+      filename: pdf.filename,
+      status: pdf.textExtractionStatus,
+      text: pdf.extractedText
+    });
+  } catch (error) {
+    console.error('Error retrieving PDF text:', error);
+    res.status(500).json({ 
+      error: 'Error retrieving PDF text',
+      details: error.message 
+    });
+  }
+});
+
+// Re-run text extraction
+router.post('/:id/extract', async (req, res) => {
+  try {
+    const pdf = await Pdf.findOne({ 
+      _id: req.params.id,
+      userId: req.userId 
+    });
+
+    if (!pdf) {
+      return res.status(404).json({ error: 'PDF not found' });
+    }
+
+    pdf.textExtractionStatus = 'pending';
+    await pdf.save();
+
+    // Extract text
+    extractTextFromPDF(pdf.data)
+      .then(async (extractedText) => {
+        pdf.extractedText = extractedText;
+        pdf.textExtractionStatus = 'completed';
+        await pdf.save();
+      })
+      .catch(async (error) => {
+        console.error('Text extraction error:', error);
+        pdf.textExtractionStatus = 'failed';
+        await pdf.save();
+      });
+
+    res.json({
+      message: 'Text extraction started',
+      status: 'pending'
+    });
+  } catch (error) {
+    console.error('Error starting text extraction:', error);
+    res.status(500).json({ 
+      error: 'Error starting text extraction',
+      details: error.message 
+    });
   }
 });
 
