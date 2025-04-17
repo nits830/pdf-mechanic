@@ -2,8 +2,14 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const pdfParse = require('pdf-parse');
+const OpenAI = require('openai');
 const Pdf = require('../models/Pdf');
 const auth = require('../middleware/auth');
+
+// Initialize OpenAI
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
 
 // Configure multer for PDF uploads (in-memory storage)
 const upload = multer({
@@ -35,7 +41,42 @@ async function extractTextFromPDF(buffer) {
   }
 }
 
-// Upload and extract text route
+// Summarize text using OpenAI
+async function summarizeText(text, type = 'concise') {
+  try {
+    let prompt;
+    if (type === 'concise') {
+      prompt = `Please provide a concise summary of the following text in about 2-3 paragraphs:\n\n${text}`;
+    } else if (type === 'detailed') {
+      prompt = `Please provide a detailed summary of the following text, including main points and key details:\n\n${text}`;
+    } else if (type === 'bullet') {
+      prompt = `Please summarize the following text in bullet points, highlighting the key points:\n\n${text}`;
+    }
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content: "You are a helpful assistant that creates clear and accurate summaries."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 1000
+    });
+
+    return response.choices[0].message.content.trim();
+  } catch (error) {
+    console.error('Error summarizing text:', error);
+    throw new Error('Failed to generate summary');
+  }
+}
+
+// Upload and extract text route with optional summarization
 router.post('/extract', async (req, res) => {
   upload(req, res, async (err) => {
     try {
@@ -54,14 +95,23 @@ router.post('/extract', async (req, res) => {
         return res.status(400).json({ error: 'No PDF file provided' });
       }
 
-      // Extract text directly
+      // Extract text
       const extractedText = await extractTextFromPDF(req.file.buffer);
 
-      // Return the extracted text
+      // Check if summarization is requested
+      const summaryType = req.query.summary; // can be 'concise', 'detailed', or 'bullet'
+      let summary = null;
+
+      if (summaryType) {
+        summary = await summarizeText(extractedText, summaryType);
+      }
+
+      // Return the extracted text and optional summary
       res.json({
         filename: req.file.originalname,
         fileSize: req.file.size,
-        text: extractedText
+        text: extractedText,
+        ...(summary && { summary })
       });
 
     } catch (error) {
@@ -72,6 +122,27 @@ router.post('/extract', async (req, res) => {
       });
     }
   });
+});
+
+// Standalone summarize route for already extracted text
+router.post('/summarize', async (req, res) => {
+  try {
+    const { text, type = 'concise' } = req.body;
+
+    if (!text) {
+      return res.status(400).json({ error: 'No text provided for summarization' });
+    }
+
+    const summary = await summarizeText(text, type);
+
+    res.json({ summary });
+  } catch (error) {
+    console.error('Summarization error:', error);
+    res.status(500).json({ 
+      error: 'Error generating summary',
+      details: error.message 
+    });
+  }
 });
 
 // Get user's PDFs
