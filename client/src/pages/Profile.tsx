@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+
 import { authService } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -9,7 +9,7 @@ const Profile = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const navigate = useNavigate();
+  
   const { checkAuth } = useAuth();
 
   useEffect(() => {
