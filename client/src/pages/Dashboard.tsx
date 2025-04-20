@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { pdfService } from '../services/api';
 import { PdfResponse, SummaryType } from '../types/pdf';
 
@@ -9,7 +8,6 @@ const Dashboard = () => {
   const [response, setResponse] = useState<PdfResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -35,22 +33,11 @@ const Dashboard = () => {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    navigate('/');
-  };
-
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex justify-between items-center mb-8">
+        <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-          <button
-            onClick={handleLogout}
-            className="text-gray-700 hover:text-blue-600 px-4 py-2 rounded-md text-sm font-medium"
-          >
-            Logout
-          </button>
         </div>
 
         <div className="bg-white shadow rounded-lg p-6">

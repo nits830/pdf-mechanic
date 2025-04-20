@@ -21,6 +21,18 @@ api.interceptors.request.use(
   }
 );
 
+// Add a response interceptor to handle token expiration
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      window.location.href = '/signin';
+    }
+    return Promise.reject(error);
+  }
+);
+
 export const authService = {
   signup: async (userData: { name: string; email: string; password: string }) => {
     const response = await api.post('/users/signup', userData);
@@ -29,7 +41,26 @@ export const authService = {
   signin: async (credentials: { email: string; password: string }) => {
     const response = await api.post('/users/signin', credentials);
     return response.data;
-  }
+  },
+  validateToken: async () => {
+    try {
+      const response = await api.get('/users/me');
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        throw new Error('Invalid or expired token');
+      }
+      throw error;
+    }
+  },
+  getProfile: async () => {
+    const response = await api.get('/users/profile');
+    return response.data;
+  },
+  updateProfile: async (profileData: { name: string; email: string; password: string }) => {
+    const response = await api.put('/users/profile', profileData);
+    return response.data;
+  },
 };
 
 export const pdfService = {

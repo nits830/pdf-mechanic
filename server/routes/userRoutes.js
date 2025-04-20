@@ -3,6 +3,8 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const { signupValidationRules, signinValidationRules, validate } = require('../middleware/validators');
+const { body, validationResult } = require('express-validator');
+const auth = require('../middleware/auth');
 
 // Sign up route
 router.post('/signup', signupValidationRules, validate, async (req, res) => {
@@ -88,6 +90,56 @@ router.post('/signin', signinValidationRules, validate, async (req, res) => {
   } catch (error) {
     console.error('Signin error:', error);
     res.status(500).json({ error: 'Error signing in' });
+  }
+});
+
+// Get current user
+router.get('/me', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId).select('-password');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json(user);
+  } catch (error) {
+    console.error('Get user error:', error);
+    res.status(500).json({ error: 'Error getting user' });
+  }
+});
+
+// Get user profile
+router.get('/profile', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId).select('-password');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json(user);
+  } catch (error) {
+    console.error('Get profile error:', error);
+    res.status(500).json({ error: 'Error getting profile' });
+  }
+});
+
+// Update user profile
+router.put('/profile', auth, async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (name) user.name = name;
+    if (email) user.email = email;
+    if (password) user.password = password;
+
+    await user.save();
+
+    res.json({ message: 'Profile updated successfully' });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    res.status(500).json({ error: 'Error updating profile' });
   }
 });
 

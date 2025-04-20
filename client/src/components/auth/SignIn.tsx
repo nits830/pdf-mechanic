@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { authService } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
 const SignIn = () => {
   const [email, setEmail] = useState('');
@@ -8,6 +9,7 @@ const SignIn = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { checkAuth } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -17,6 +19,7 @@ const SignIn = () => {
     try {
       const response = await authService.signin({ email, password });
       localStorage.setItem('token', response.token);
+      await checkAuth();
       navigate('/dashboard');
     } catch (err: any) {
       setError(err.response?.data?.error || 'An error occurred during sign in');
